@@ -3,6 +3,7 @@ title: "Data 621 HW2"
 author: "Chi Pong, Euclid Zhang, Jie Zou, Joseph Connolly, LeTicia Cancel"
 date: "2/19/2022"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
     code_folding: hide
@@ -184,20 +185,18 @@ calc_f1(df,"class","scored.class")
 
 Before we move on, let's consider a question that was asked: What are the bounds on the F1 score? Show that the F1 score will always be between 0 and 1. (Hint: If 0\<a\<1 and 0\<b\<1 then ab\<a.)
 
-*Ans*: let $α=Precision, β=Sensitivity, γ=F1Score=\frac{2×α×β}{α+β}$
+*Ans*: let $\alpha=Precision, \beta=Sensitivity, \gamma=F1Score=\frac{2×\alpha×\beta}{\alpha+\beta}$
 
-$$
-
- \because 0<α<1\space and \space 0<β<1 \\
- \therefore \frac{2×α×β}{α+β}>0
+$$\because 0<\alpha<1\space and \space 0<\beta<1 \\
+ \therefore \frac{2×\alpha×\beta}{\alpha+\beta}>0 \\
 $$
 
 and,
 
 $$
-if \space 0<α<1 \space and \space 0<β<1 \space then \space αβ<α \\
-\frac{2×α×β}{α+β}=\frac{αβ}{α+β}+\frac{αβ}{α+β} < \frac{α}{α+β}+\frac{β}{α+β}=\frac{α+β}{α+β}=1 \\
-0<γ<1
+if \space 0<\alpha<1 \space and \space 0<\beta<1 \space then \space \alpha\beta<\alpha \\
+\frac{2×\alpha×\beta}{\alpha+\beta}=\frac{\alpha\beta}{\alpha+\beta}+\frac{\alpha\beta}{\alpha+\beta} < \frac{\alpha}{\alpha+\beta}+\frac{\beta}{\alpha+\beta}=\frac{\alpha+\beta}{\alpha+\beta}=1 \\
+0<\gamma<1
 $$
 
 We proved that F1 Score is always between 0 and 1.
