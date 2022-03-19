@@ -320,3 +320,7 @@ noquote(paste0("The AUC is: ", round(auc(rocCurve),2)))
 ```
 
 The AUC is exactly the same as what we calculated earlier using our own function.
+
+## Supplementary Info
+
+One of our team mates created this supplementary doc so that when it comes to interviews one can use it as an appendix. [Link](https://github.com/metis-macys-66898/Data_621/blob/main/HW2/data-608-hw2-supplementary.pdf "Link to github")
