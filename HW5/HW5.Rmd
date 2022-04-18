@@ -131,7 +131,7 @@ Strategies:
 
 1)  impute STARS to 0
 
-2)  Use knnImpute to impute all the remaining 7 columns
+2)  Use knnImpute and BoxCox to impute all the remaining 7 columns
 
 ```{r}
 
