@@ -1,0 +1,13 @@
+base
+dplyr
+ggplot2
+tidyr
+lattice
+caret
+RANN
+corrplot
+RColorBrewer
+MASS
+gridExtra
+pscl
+kableExtra

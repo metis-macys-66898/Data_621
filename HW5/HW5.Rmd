@@ -1,0 +1,453 @@
+---
+title: "Data 621 - HW5"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+## Loading of Libraries
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(caret) #for featurePlot
+library(RANN)
+library(corrplot)
+library(RColorBrewer)
+library(MASS)
+library(gridExtra)
+library(pscl)
+library(kableExtra)
+```
+
+![Data Dictionary](./Variables.png)
+
+## Loading of files
+
+```{r}
+setwd("/Users/dpong/Data 621/HW5/")
+
+# Load Wine dataset
+wine_train <- read.csv('https://raw.githubusercontent.com/metis-macys-66898/Data_621/main/HW5/wine-training-data.csv', fileEncoding="UTF-8-BOM")
+wine_eval <- read.csv('https://raw.githubusercontent.com/metis-macys-66898/Data_621/main/HW5/wine-evaluation-data.csv')
+```
+
+As we know the INDEX variable isn't going to be useful for this modeling exercise, we decide to drop it from the dataset altogether.
+
+Given that the Index column had no impact on the target variable, number of wines, it was dropped.
+
+```{r echo=FALSE}
+
+wine_train <- wine_train %>% dplyr::select(-INDEX)
+wine_eval <- wine_eval %>% dplyr::select(-IN)
+```
+
+## Data Exploration
+
+## Summary
+
+```{r}
+summary(wine_train)
+```
+
+There is a total of 8 features that has NA's (missing) values. Our target variable ranges between 0 and 8, which makes sense, because the target variable is the number of cases purchased. Even tho' it might not make sense, some of these features measuring the quantity of chemical in the wine does have negative values. It might be due to the fact these variables had been transformed beforehand. We decided to leave them as is.
+
+## Histograms
+
+```{r}
+# Create gather_df for ggplot()
+gather_df <- wine_train %>% gather(key = 'variable', value = 'value')
+# Histogram plots of each variable
+ggplot(gather_df) + 
+  geom_histogram(aes(x=value, y = ..density..), bins=30) + 
+  geom_density(aes(x=value), color='blue') +
+  facet_wrap(. ~ variable, scales='free', ncol=4)
+```
+
+We see that most of the distributions has approximately normal distributions except for STARS and AcidIndex, which are both right skewed.
+
+## Boxplots
+
+Next, we're going to run some boxplots to visualize the spreads of each variable.
+
+```{r}
+# Create gather_df for the input of ggplot
+gather_df <- wine_train %>% gather(key = 'variable', value = 'value')
+# Boxplots for each variable
+ggplot(gather_df, aes(variable, value)) + 
+  geom_boxplot() +  
+  facet_wrap(. ~variable, scales='free', ncol=4)
+```
+
+```{r}
+df_pivot_wide <- wine_train %>% 
+  dplyr::select(STARS, LabelAppeal, AcidIndex, TARGET ) %>%
+  pivot_longer(cols = -TARGET, names_to="variable", values_to="value") %>%
+  arrange(variable, value)
+df_pivot_wide %>% 
+  ggplot(mapping = aes(x = factor(value), y = TARGET)) +
+    geom_boxplot() + 
+    facet_wrap(.~variable, scales="free") +
+    theme_minimal()
+```
+
+### Commentaries:
+
+There aren't too many outliners for AcidIndex. You can tell there are a lot of zeros for AcidIndex 12, 16, and 17. There is no clear pattern in relation to TARGET. As for LabelAppeal, I do see there is positive correlation with TARGET. The higher the LabelAppeal, the higher volume of TARGET you get. As for STARS, there is an obvious positive correlation with TARGET. TARGET = NA seems to be distribute across all spectrum of STARS. In order to satisfy some of the requirements for the model, I'd impute NA with 0. The overall trend with the existing values is still the same where the higher the value of STARS will naturally net a higher volume in TARGET, which is cases of wine sold.
+
+## Scatter Plots
+
+```{r, fig.width = 8, fig.height = 8 }
+
+featurePlot(wine_train[,2:ncol(wine_train)], wine_train[,1], pch = 18)
+```
+
+What I am looking for is some irregular gaps for some values in a given variable. I do not see any irregular distribution against the the TARGET variable, which is shown in the y-axis.
+
+## Missing values & Imputations
+
+With that said, we do need to check the missing values.
+
+```{r}
+missing <- colSums(wine_train %>% sapply(is.na))
+missing_pct <- round(missing / nrow(wine_train) * 100, 2)
+
+stack(sort(missing_pct, decreasing = TRUE))
+```
+
+As you can see, there are 7 additional variables that need to be imputed in addition to the STARS variable.
+
+## Data Preparations
+
+Strategies:
+
+1)  impute STARS to 0
+
+2)  Use knnImpute to impute all the remaining 7 columns
+
+```{r}
+
+training_x <- wine_train %>% dplyr::select(-TARGET)
+training_y <- wine_train$TARGET
+
+eval_x <- wine_eval %>% dplyr::select(-TARGET)
+eval_y <- wine_eval$TARGET
+
+create_na_dummy <- function(vector) {
+  as.integer(vector %>% is.na())
+}
+
+impute_missing <- function(data) {
+  # Replace missing STARS with 0 
+  data$STARS <- data$STARS %>%
+    tidyr::replace_na(0)
+  return(data)
+}
+# Replace missing STARS with 'unknown' and convert STASR to a factor
+training_x <- impute_missing(training_x)
+eval_x <- impute_missing(eval_x)
+imputation <- caret::preProcess(training_x, method = c("knnImpute", 'BoxCox'))
+# summary(imputation)
+training_x_imp <- predict(imputation, training_x)
+eval_x_imp <- predict(imputation, eval_x)
+clean_df <- cbind(training_y, training_x_imp) %>% 
+  as.data.frame() %>%
+  rename(TARGET = training_y)
+clean_eval_df <- cbind(eval_y, eval_x_imp) %>% 
+  as.data.frame() %>%
+  rename(TARGET = eval_y)
+  
+```
+
+## Feature-Target Correlations
+
+```{r}
+stack(sort(cor(clean_df[,1], clean_df[,2:ncol(clean_df)])[,], decreasing=TRUE))
+```
+
+Only STARS is considered borderline highly correlated with the TARGET variable. Note that this is after the imputation.
+
+## **Multi-collinearity**
+
+The best way to check for multi-collinearity is to use correlation coefficients among variables, or predictors.
+
+```{r}
+correlation = cor(clean_df, use = 'pairwise.complete.obs')
+corrplot(correlation, 'ellipse', type = 'lower',  order = 'hclust', col=brewer.pal(n=6, name="RdYlBu"))
+```
+
+The correlation coefficients among predictors are quite low. With that said, we checked all the assumptions for linear regressions.
+
+Final steps to data prep. I have to create a data partition separating out train set and test set. 80% train 20% test.
+
+```{r}
+y_mat <- as.matrix(clean_df$TARGET)
+# Create a train_vect 
+train_vect <- createDataPartition(y_mat, p=0.8, list=FALSE)
+# Build train sets 
+trainX <- clean_df[train_vect,] %>% dplyr::select(-TARGET)
+trainY <- clean_df[train_vect,] %>% dplyr::select(TARGET)
+# Output test sets
+testX <- clean_df[-train_vect,] %>% dplyr::select(-TARGET)
+testY <- clean_df[-train_vect,] %>% dplyr::select(TARGET)
+# Build a DF for both train and test
+train_df <- as.data.frame(trainX)
+train_df$TARGET <- trainY$TARGET
+print(paste('Size of Training data frame: ', dim(train_df)[1]))
+test_df <- as.data.frame(testX)
+test_df$TARGET <- testY$TARGET
+print(paste('Size of Testing data frame: ', dim(test_df)[1]))
+
+model_perf_metrics <- function(model, trainX, trainY, testX, testY) {
+  # Evaluate Model with testing data set
+  predY <- predict(model, newdata=trainX)
+  model_results <- data.frame(obs = trainY, pred=predY)
+  colnames(model_results) = c('obs', 'pred')
+  
+  # defaultSummary includes RMSE, Rsquared, and MAE by default
+  model_eval <- defaultSummary(model_results)
+  
+  # Add AIC score to the model_eval results
+  model_eval[4] <- AIC(model)
+  names(model_eval)[4] <- 'AIC'
+ 
+  # Add BIC score to the model_eval results
+  model_eval[5] <- BIC(model)
+  names(model_eval)[5] <- 'BIC'
+   
+  return(model_eval)
+}
+```
+
+## Model Building
+
+```{r variableImportancePlot}
+variableImportancePlot <- function(model=NULL, chart_title='Variable Importance Plot') {
+  # Make sure a model was passed
+  if (is.null(model)) {
+    return
+  }
+  
+  # use caret and gglot to print a variable importance plot
+  caret::varImp(model) %>% as.data.frame() %>% 
+    ggplot(aes(x = reorder(rownames(.), desc(Overall)), y = Overall)) +
+    geom_col(aes(fill = Overall)) +
+    theme(panel.background = element_blank(),
+          panel.grid = element_blank(),
+          axis.text.x = element_text(angle = 90)) +
+    scale_fill_gradient() +
+    labs(title = chart_title,
+         x = "Parameter",
+         y = "Relative Importance")
+}
+```
+
+#### Poisson Model 1 (full model w/ 14 predictors)
+
+```{r}
+pois1 <- glm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+              Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+              pH + Sulphates + Alcohol + 
+              as.factor(LabelAppeal) +
+              as.factor(AcidIndex) +
+              as.factor(STARS),
+              data=train_df, 
+              family=poisson
+            )
+summary(pois1)
+
+# Evaluation and VarImp 
+
+(pois1_eval <- model_perf_metrics(pois1, trainX, trainY, testX, testY))
+poi1VarImp <- variableImportancePlot(pois1, "Poisson Model 1 Variable Importance")
+```
+
+#### Poisson Model 2
+
+Just picked the predictors that are statistical significant in model 1.
+
+Predictors include:
+
+-   VolatileAcidity
+
+-   Chlorides
+
+-   FreeSulfurDioxide
+
+-   TotalSulfurDioxide
+
+-   Sulphates
+
+-   Alcohol
+
+-   LabelAppeal
+
+-   AcidIndex
+
+-   STARS
+
+```{r}
+pois2 <- glm(TARGET ~ VolatileAcidity + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Sulphates +               Alcohol + 
+              as.factor(LabelAppeal) + 
+              as.factor(AcidIndex) + 
+              as.factor(STARS),
+              data=clean_df, 
+              family=poisson
+             )
+summary(pois2)
+
+# Evaluate Model 2 with testing data set
+(pois2_eval <- model_perf_metrics(pois2, trainX, trainY, testX, testY))
+poi2VarImp <- variableImportancePlot(pois2, "Poisson Model 2 Variable Importance")
+```
+
+#### Negative Binomial Model 1
+
+```{r}
+nb1 <- glm.nb(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+                Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+                pH + Sulphates + Alcohol + 
+                as.factor(LabelAppeal) +
+                as.factor(AcidIndex) +
+                as.factor(STARS),
+              data=clean_df)
+summary(nb1)
+
+(nb1_eval <- model_perf_metrics(nb1, trainX, trainY, testX, testY))
+nb1VarImp <- variableImportancePlot(nb1, "Negative Binomial 1 Variable Importance")
+```
+
+#### Negative Binomial Model 2 (full model w/ 14 predictors)
+
+Just picked the predictors that are statistical significant in model 1.
+
+Predictors include:
+
+-   VolatileAcidity
+
+-   Chlorides
+
+-   FreeSulfurDioxide
+
+-   TotalSulfurDioxide
+
+-   Sulphates
+
+-   Alcohol
+
+-   LabelAppeal
+
+-   AcidIndex
+
+-   STARS
+
+```{r}
+nb2 <- glm.nb(TARGET~ VolatileAcidity + Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Sulphates 
+              + 
+              Alcohol + 
+              as.factor(LabelAppeal) + 
+              as.factor(AcidIndex) + 
+              as.factor(STARS),
+              data=clean_df)
+summary (nb2)
+
+(nb2_eval <- model_perf_metrics(nb2, trainX, trainY, testX, testY))
+nb2VarImp <- variableImportancePlot(nb2, "Negative Binomial 2 Variable Importance")
+```
+
+#### Linear Model 1 (full model w/ 14 predictors)
+
+```{r}
+lm1 <- lm(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+                Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+                pH + Sulphates + Alcohol + 
+                as.factor(LabelAppeal) +
+                as.factor(AcidIndex) +
+                as.factor(STARS),
+              data=clean_df)
+summary(lm1)
+
+(lm1_eval <- model_perf_metrics(lm1, trainX, trainY, testX, testY))
+lm1VarImp <- variableImportancePlot(lm1, "Linear Model 1 Variable Importance")
+```
+
+#### Linear Model 2
+
+For this linear model, we opted to use StepAIC to step thru' the variable selection algorithm.
+
+```{r}
+lm2 <- stepAIC(lm1, direction = "both",
+               scope = list(upper = lm1, lower = ~ 1),
+               scale = 0, trace = FALSE)
+summary(lm2)
+
+(lm2_eval <- model_perf_metrics(lm2, trainX, trainY, testX, testY))
+lm2VarImp <- variableImportancePlot(lm2, "Linear Model 2 Variable Importance")
+```
+
+#### Zero-inflated Poisson 
+
+```{r}
+ziPois <- pscl::zeroinfl(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+                          Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+                          pH + Sulphates + Alcohol + 
+                          as.factor(LabelAppeal) +
+                          as.factor(AcidIndex) |  STARS,
+                          data=clean_df, 
+                          dist = "poisson", 
+                          model = TRUE
+                        )
+summary(ziPois)
+
+(ziPois_eval <- model_perf_metrics(ziPois, trainX, trainY, testX, testY))
+
+```
+
+#### Zero-inflated Negative Binomial
+
+```{r}
+ziNB <- pscl::zeroinfl(TARGET ~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+                          Chlorides + FreeSulfurDioxide + TotalSulfurDioxide + Density +
+                          pH + Sulphates + Alcohol + 
+                          as.factor(LabelAppeal) +
+                          as.factor(AcidIndex)  |  STARS,
+                          data=clean_df, 
+                          dist = "negbin", 
+                          model = TRUE
+                        )
+summary(ziNB)
+
+(ziNB_eval <- model_perf_metrics(ziNB, trainX, trainY, testX, testY))
+
+```
+
+## **Model Selection**
+
+Any of the linear models (full or reduced) appears to be winning model of choice.
+
+```{r}
+models_summary <- rbind(pois1_eval, pois2_eval, nb1_eval, nb2_eval, lm1_eval, lm2_eval, ziPois_eval, ziNB_eval)
+kable(models_summary) %>% 
+  kable_paper(full_width = F) %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  row_spec(5:6, bold = T, color = "white", background = "purple")
+
+```
+
+#### Variable Importance
+
+From the Variable Importance point of view, the top 4 most important features across the board is always consistently a derivative of a factor of STARS.
+
+```{r, fig.width=8, fig.height=18}
+grid.arrange(poi1VarImp, poi2VarImp, nb1VarImp, nb2VarImp, lm1VarImp, lm2VarImp, ncol = 2)
+```
+
+## 
