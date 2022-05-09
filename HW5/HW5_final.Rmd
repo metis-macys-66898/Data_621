@@ -3,6 +3,7 @@ title: "Data 621 - HW5"
 author: "Chi Pong, Euclid Zhang, Jie Zou, Joseph Connolly, LeTicia Cancel"
 date: "5/3/2022"
 output:
+  pdf_document: default
   rmdformats::readthedown:
     highlight: kate
     code_folding: hide
@@ -126,7 +127,7 @@ The best way to check for multi-collinearity is to use correlation coefficients 
 # corrplot::corrplot(cor(train_df, use = "na.or.complete"), 
 #                    method = 'number', type = 'lower', diag = FALSE, tl.srt = 0.1)
 correlation = cor(train_df, use = 'pairwise.complete.obs')
-corrplot::corrplot(correlation, method = 'ellipse', type = 'lower',  order = 'hclust', col=brewer.pal(n=6, name="RdYlBu"))
+corrplot::corrplot(correlation, method = 'ellipse', type = 'lower', order = 'hclust', col=brewer.pal(n=6, name="RdYlBu"))
 
 ```
 
